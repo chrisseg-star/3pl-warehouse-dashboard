@@ -1163,12 +1163,6 @@
       }
     }
 
-    var brandRow='<div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">'+
-      '<span style="font-size:12px; font-weight:600; color:#6B6A63;">Brand</span>'+
-      '<select id="sla-brand-select" style="font-size:12px; padding:6px 10px; border-radius:6px; border:0.5px solid #D8D6CA; background:#FFFFFF; color:#2C2C2A;">'+
-      spec.brands.map(function(b){return '<option value="'+b+'"'+(b===brand?' selected':'')+'>'+displayBrand(b)+'</option>';}).join('')+
-      '</select></div>';
-
     var subTabHtml=renderSlaSubTabs();
     var mainHtml;
     if(slaSubTab==='inbound'){
@@ -1183,15 +1177,7 @@
         '<div class="table-scroll"><table id="table-sla">'+headTop+headSub+body+'</table></div>'+footnotes;
     }
 
-    document.getElementById('content-host').innerHTML=(slaSubTab==='overview'?brandRow:'')+subTabHtml+mainHtml;
-
-    var slaBrandSelectEl=document.getElementById('sla-brand-select');
-    if(slaBrandSelectEl){
-      slaBrandSelectEl.addEventListener('change',function(){
-        slaBrand=this.value;
-        renderSLA(slaBrand);
-      });
-    }
+    document.getElementById('content-host').innerHTML=subTabHtml+mainHtml;
     bindSlaSubTabHandlers();
     bindOrderFilterHandlers();
     document.querySelectorAll('.sla-expand-row').forEach(function(row){
