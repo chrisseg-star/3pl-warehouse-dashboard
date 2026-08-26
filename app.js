@@ -1183,12 +1183,15 @@
         '<div class="table-scroll"><table id="table-sla">'+headTop+headSub+body+'</table></div>'+footnotes;
     }
 
-    document.getElementById('content-host').innerHTML=brandRow+subTabHtml+mainHtml;
+    document.getElementById('content-host').innerHTML=(slaSubTab==='overview'?brandRow:'')+subTabHtml+mainHtml;
 
-    document.getElementById('sla-brand-select').addEventListener('change',function(){
-      slaBrand=this.value;
-      renderSLA(slaBrand);
-    });
+    var slaBrandSelectEl=document.getElementById('sla-brand-select');
+    if(slaBrandSelectEl){
+      slaBrandSelectEl.addEventListener('change',function(){
+        slaBrand=this.value;
+        renderSLA(slaBrand);
+      });
+    }
     bindSlaSubTabHandlers();
     bindOrderFilterHandlers();
     document.querySelectorAll('.sla-expand-row').forEach(function(row){
