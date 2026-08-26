@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>3PL Warehouse Operations Dashboard</title>
+<link rel="icon" type="image/png" href="favicon.png" />
+<style>
+  :root {
+    --accent: #089AA0;
+    --accent-dark: #045458;
+    --accent-tint: #E6F4F5;
+    --accent-tint2: #D9EFF0;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; background: #F7F6EF; color: #2C2C2A; }
+  a { color: inherit; }
+  table { width: 100%; border-collapse: collapse; background: #FFFFFF; border: 0.5px solid #E4E2D8; border-radius: 8px; overflow: hidden; }
+  th, td { padding: 7px 9px; font-size: 12px; }
+  .sidebar { width: 210px; flex-shrink: 0; background: #FFFFFF; border-right: 0.5px solid #E4E2D8; padding: 16px 0; overflow: hidden; transition: width 0.18s ease, padding 0.18s ease; white-space: nowrap; }
+  .sidebar.collapsed { width: 0; padding: 16px 0; border-right: none; }
+  .nav-section { font-size: 11px; font-weight: 600; color: #9A988F; letter-spacing: 0.04em; padding: 14px 16px 8px; }
+  .nav-section:first-child { padding-top: 0; }
+  .nav-item { display: flex; align-items: center; gap: 9px; padding: 7px 16px; font-size: 13px; cursor: pointer; border-left: 3px solid transparent; color: #2C2C2A; }
+  .nav-item:hover { background: #FAF8F2; }
+  .nav-item.active { border-left-color: var(--accent); color: var(--accent-dark); background: var(--accent-tint); }
+  .nav-item.disabled { color: #C2C0B6; cursor: default; }
+  .nav-item.disabled:hover { background: transparent; }
+  .nav-icon { width: 22px; height: 22px; border-radius: 50%; background: #EFEDE4; color: #6B6A63; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .nav-item.active .nav-icon { background: var(--accent-tint2); color: var(--accent-dark); }
+  .nav-item.disabled .nav-icon { background: #F2F1EC; color: #C2C0B6; }
+  .nav-icon svg { width: 13px; height: 13px; }
+  .burger-btn { width: 32px; height: 32px; border-radius: 7px; border: 0.5px solid #E4E2D8; background: #FFFFFF; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
+  .burger-btn:hover { background: #FAF8F2; }
+  select, .pill-btn { font-size: 12px; padding: 6px 10px; border-radius: 6px; border: 0.5px solid #D8D6CA; background: #FFFFFF; color: #2C2C2A; }
+  .filter-pill { font-size: 12px; padding: 5px 13px; border-radius: 20px; cursor: pointer; border: 0.5px solid #D8D6CA; background: #FFFFFF; color: #6B6A63; }
+  .filter-pill.active { background: var(--accent); color: #FFFFFF; border-color: var(--accent); font-weight: 600; }
+  .export-btn { font-size: 11px; padding: 5px 12px; border-radius: 6px; border: 0.5px solid var(--accent); background: #FFFFFF; color: var(--accent-dark); cursor: pointer; font-weight: 600; }
+  .export-btn:hover { background: var(--accent-tint); }
+  .table-scroll { overflow-x: auto; }
+  ::-webkit-scrollbar { height: 8px; width: 8px; }
+</style>
+</head>
+<body>
+
+<div style="display:flex; align-items:center; gap:14px; padding:16px 24px; background:#FFFFFF; border-bottom:0.5px solid #E4E2D8; position:sticky; top:0; z-index:100;">
+  <div id="sidebar-toggle-btn" class="burger-btn" title="Toggle sidebar">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="16" height="16"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </div>
+  <img src="favicon.png" alt="" style="width:26px; height:26px; border-radius:6px;" />
+  <div style="font-size:17px; font-weight:600; color:#1F1F1D; flex:1;">3PL Warehouse Operations Dashboard</div>
+  <span style="font-size:11px; color:#3B6D11; background:#EAF3DE; padding:5px 12px; border-radius:20px;">Real data — Jun to Jul 2026</span>
+</div>
+
+<div style="display:flex; min-height:calc(100vh - 65px);">
+  <div id="sidebar" class="sidebar">
+    <div id="sidebar-nav"></div>
+  </div>
+
+  <div style="flex:1; padding:22px 28px; min-width:0;">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; gap:10px; flex-wrap:wrap;">
+      <div id="tab-title" style="font-size:16px; font-weight:600; color:#1F1F1D;">Inventory accuracy</div>
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <div id="wh-buttons" style="display:none; gap:4px; background:#EFEDE4; border-radius:8px; padding:2px;"></div>
+        <div id="view-toggle" style="display:none; gap:4px; background:#EFEDE4; border-radius:8px; padding:2px;"></div>
+        <select id="brand-select" style="display:none;"></select>
+        <select id="period-select"></select>
+      </div>
+    </div>
+    <div id="content-host"></div>
+    <div style="margin-top:28px; padding-top:14px; border-top:0.5px solid #E4E2D8; font-size:10.5px; color:#B4B2A9;">Draft build — data refreshed manually from SellerCloud exports. Live Google Sheets sync coming soon.</div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="sla-orders.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
