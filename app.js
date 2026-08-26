@@ -957,8 +957,9 @@
   var slaBrand=defaultBrandFor(slaWarehouse);
   var slaSubTab='overview'; // 'overview' | 'inbound' | 'outbound' | 'offenders'
   var slaOffenderOpen={}; // expanded-row tracker for Top Offenders, keyed by row id
-  var slaInboundFilters={brand:'All',dateFrom:'',dateTo:'',within:'All'};
-  var slaOutboundFilters={brand:'All',channel:'All',dateFrom:'',dateTo:'',within:'All'};
+  var slaInboundFilters={brand:'All',dateFrom:'',dateTo:'',within:'All',search:''};
+  var slaOutboundFilters={brand:'All',channel:'All',dateFrom:'',dateTo:'',within:'All',search:''};
+  var slaSearchFocus=null; // {kind,pos} — preserves cursor position across the full re-render on each keystroke
 
   // ---------------- Order Details filter helpers (Inbound / Outbound tabs) ----------------
   function parseMDY(s){
@@ -981,7 +982,10 @@
     if(!rowBrand) return false;
     return rowBrand.indexOf(filterBrand)!==-1;
   }
-  function renderOrderFilterBar(kind,filters,brandOptions,channelOptions){
+  function renderOrderFilterBar(kind,filters,brandOptions,channelOptions,searchLabel){
+    var searchHtml='<div style="display:flex; align-items:center; gap:6px;"><span style="font-size:11px; font-weight:600; color:#6B6A63;">Search</span>'+
+      '<input type="text" class="sla-filter-search" data-kind="'+kind+'" placeholder="'+searchLabel+'" value="'+(filters.search||'').replace(/"/g,'&quot;')+'" style="font-size:12px; padding:5px 8px; border-radius:6px; border:0.5px solid #D8D6CA; color:#2C2C2A; min-width:180px;">'+
+      '</div>';
     var brandSel='<select class="sla-filter-select" data-filter="brand" data-kind="'+kind+'" style="font-size:12px; padding:5px 8px; border-radius:6px; border:0.5px solid #D8D6CA; background:#FFFFFF; color:#2C2C2A;">'+
       ['All'].concat(brandOptions).map(function(b){return '<option value="'+b+'"'+(b===filters.brand?' selected':'')+'>'+b+'</option>';}).join('')+
       '</select>';
@@ -1001,6 +1005,7 @@
       '<span style="font-size:11px; color:#9A988F;">to</span>'+
       '<input type="date" class="sla-filter-date" data-filter="dateTo" data-kind="'+kind+'" value="'+filters.dateTo+'" style="font-size:12px; padding:5px 8px; border-radius:6px; border:0.5px solid #D8D6CA; color:#2C2C2A;">';
     return '<div style="display:flex; align-items:center; gap:18px; flex-wrap:wrap; background:#FFFFFF; border:0.5px solid #E4E2D8; border-radius:8px; padding:10px 14px; margin-bottom:14px;">'+
+      searchHtml+
       '<div style="display:flex; align-items:center; gap:6px;"><span style="font-size:11px; font-weight:600; color:#6B6A63;">Brand</span>'+brandSel+'</div>'+
       channelHtml+
       '<div style="display:flex; align-items:center; gap:6px;"><span style="font-size:11px; font-weight:600; color:#6B6A63;">Date range</span>'+dateHtml+'</div>'+
@@ -1029,6 +1034,15 @@
         var kind=el.getAttribute('data-kind'),val=el.getAttribute('data-value');
         var target=kind==='inbound'?slaInboundFilters:slaOutboundFilters;
         target.within=val;
+        renderSLA(slaBrand);
+      });
+    });
+    document.querySelectorAll('.sla-filter-search').forEach(function(el){
+      el.addEventListener('input',function(){
+        var kind=el.getAttribute('data-kind');
+        var target=kind==='inbound'?slaInboundFilters:slaOutboundFilters;
+        target.search=el.value;
+        slaSearchFocus={kind:kind,pos:el.selectionStart};
         renderSLA(slaBrand);
       });
     });
@@ -1178,6 +1192,15 @@
     }
 
     document.getElementById('content-host').innerHTML=subTabHtml+mainHtml;
+
+    if(slaSearchFocus){
+      var sEl=document.querySelector('.sla-filter-search[data-kind="'+slaSearchFocus.kind+'"]');
+      if(sEl){
+        sEl.focus();
+        try{ sEl.setSelectionRange(slaSearchFocus.pos,slaSearchFocus.pos); }catch(e){}
+      }
+      slaSearchFocus=null;
+    }
     bindSlaSubTabHandlers();
     bindOrderFilterHandlers();
     document.querySelectorAll('.sla-expand-row').forEach(function(row){
@@ -1263,13 +1286,15 @@
     if(slaWarehouse!=='US'||typeof window.SLA_ORDERS_US==='undefined') return comingSoonPanel();
     var d=window.SLA_ORDERS_US;
     var brandOptions=SLA_SPECS.US.brands.filter(function(b){return b!=='Total';});
+    var searchTerm=(slaInboundFilters.search||'').trim().toLowerCase();
     var filtered=d.inbound.filter(function(r){
       return brandMatchesFilter(r[1],slaInboundFilters.brand)&&
         dateInRange(r[3],slaInboundFilters.dateFrom,slaInboundFilters.dateTo)&&
-        (slaInboundFilters.within==='All'||r[6]===slaInboundFilters.within);
+        (slaInboundFilters.within==='All'||r[6]===slaInboundFilters.within)&&
+        (!searchTerm||(r[0]||'').toLowerCase().indexOf(searchTerm)!==-1);
     });
     return '<div style="font-size:11.5px; color:#9A988F; margin-bottom:2px;">Order-level detail from your UNIS in/out export, Nov 2025–Jul 2026. Date range filters by In-Yard Date.</div>'+
-      renderOrderFilterBar('inbound',slaInboundFilters,brandOptions,null)+
+      renderOrderFilterBar('inbound',slaInboundFilters,brandOptions,null,'Search PO number...')+
       slaSectionHeader('Inbound orders',filtered.length)+
       renderInboundOrdersTable(filtered,'table-sla-inbound','SLA_Inbound_Orders.xlsx');
   }
@@ -1281,16 +1306,18 @@
     var channelOptions=[];
     d.outboundB2B.concat(d.outboundB2C).forEach(function(r){ if(r[1]&&channelOptions.indexOf(r[1])===-1) channelOptions.push(r[1]); });
     channelOptions.sort();
+    var searchTerm=(slaOutboundFilters.search||'').trim().toLowerCase();
     function matches(r,dateIdx,withinIdx){
       return brandMatchesFilter(r[2],slaOutboundFilters.brand)&&
         (slaOutboundFilters.channel==='All'||r[1]===slaOutboundFilters.channel)&&
         dateInRange(r[dateIdx],slaOutboundFilters.dateFrom,slaOutboundFilters.dateTo)&&
-        (slaOutboundFilters.within==='All'||r[withinIdx]===slaOutboundFilters.within);
+        (slaOutboundFilters.within==='All'||r[withinIdx]===slaOutboundFilters.within)&&
+        (!searchTerm||String(r[0]||'').toLowerCase().indexOf(searchTerm)!==-1);
     }
     var filteredB2B=d.outboundB2B.filter(function(r){ return matches(r,5,8); });
     var filteredB2C=d.outboundB2C.filter(function(r){ return matches(r,4,7); });
     return '<div style="font-size:11.5px; color:#9A988F; margin-bottom:2px;">Order-level detail from your UNIS in/out export, Nov 2025–Jul 2026. Date range filters by Order Date.</div>'+
-      renderOrderFilterBar('outbound',slaOutboundFilters,brandOptions,channelOptions)+
+      renderOrderFilterBar('outbound',slaOutboundFilters,brandOptions,channelOptions,'Search order number...')+
       slaSectionHeader('B2B outbound orders',filteredB2B.length)+
       renderOutboundOrdersTable(filteredB2B,'table-sla-outbound-b2b','SLA_B2B_Outbound_Orders.xlsx',true)+
       slaSectionHeader('B2C outbound orders',filteredB2C.length)+
