@@ -960,6 +960,75 @@
   var slaInboundFilters={brand:'All',dateFrom:'',dateTo:'',within:'All',search:''};
   var slaOutboundFilters={brand:'All',channel:'All',dateFrom:'',dateTo:'',within:'All',search:''};
   var slaSearchFocus=null; // {kind,pos} — preserves cursor position across the full re-render on each keystroke
+  var slaInboundSort={col:null,dir:'desc'};
+  var slaOutboundSort={b2b:{col:null,dir:'desc'},b2c:{col:null,dir:'desc'}};
+
+  // ---------------- Order table sort helpers (Inbound / Outbound tabs) ----------------
+  function sortRowsBy(rows,colSpecs,sortState){
+    if(!sortState||sortState.col===null) return rows;
+    var spec=null;
+    for(var i=0;i<colSpecs.length;i++){ if(colSpecs[i].key===sortState.col){ spec=colSpecs[i]; break; } }
+    if(!spec) return rows;
+    var sorted=rows.slice();
+    sorted.sort(function(a,b){
+      var va=a[spec.idx],vb=b[spec.idx],cmp;
+      if(spec.type==='date'){
+        var da=parseMDY(va),db=parseMDY(vb);
+        cmp=(da?da.getTime():-Infinity)-(db?db.getTime():-Infinity);
+      } else if(spec.type==='number'){
+        var na=typeof va==='number'?va:-Infinity,nb=typeof vb==='number'?vb:-Infinity;
+        cmp=na-nb;
+      } else {
+        cmp=String(va==null?'':va).localeCompare(String(vb==null?'':vb));
+      }
+      return sortState.dir==='asc'?cmp:-cmp;
+    });
+    return sorted;
+  }
+  function sortableTh(spec,sortState,tableKind,groupKey){
+    var active=sortState&&sortState.col===spec.key;
+    var arrow=active?(sortState.dir==='asc'?' ▲':' ▼'):'';
+    return '<th class="sla-sort-th" data-sort-col="'+spec.key+'" data-kind="'+tableKind+'"'+(groupKey?' data-group="'+groupKey+'"':'')+
+      ' style="font-weight:600; color:'+(active?'#089AA0':'#6B6A63')+'; text-align:'+(spec.align||'right')+'; border-bottom:0.5px solid #E4E2D8; text-transform:uppercase; letter-spacing:0.02em; font-size:10.5px; cursor:pointer; white-space:nowrap; user-select:none; position:sticky; top:0; z-index:2; background:#FFFFFF;">'+spec.label+arrow+'</th>';
+  }
+  function stickyBlankTh(width){
+    return '<th style="width:'+width+'px; border-bottom:0.5px solid #E4E2D8; position:sticky; top:0; z-index:2; background:#FFFFFF;"></th>';
+  }
+  function bindOrderSortHandlers(){
+    document.querySelectorAll('.sla-sort-th').forEach(function(el){
+      el.addEventListener('click',function(){
+        var kind=el.getAttribute('data-kind'),colKey=el.getAttribute('data-sort-col'),group=el.getAttribute('data-group');
+        var state=kind==='inbound'?slaInboundSort:(group==='b2b'?slaOutboundSort.b2b:slaOutboundSort.b2c);
+        if(state.col===colKey){ state.dir=state.dir==='asc'?'desc':'asc'; }
+        else { state.col=colKey; state.dir='desc'; }
+        renderSLA(slaBrand);
+      });
+    });
+  }
+  var INBOUND_COLS=[
+    {key:'po',label:'PO Number',idx:0,type:'string',align:'left'},
+    {key:'brand',label:'Brand',idx:1,type:'string',align:'left'},
+    {key:'qty',label:'Received Qty',idx:2,type:'number',align:'right'},
+    {key:'inyard',label:'In-Yard Date',idx:3,type:'date',align:'right'},
+    {key:'receive',label:'Receiving Date',idx:4,type:'date',align:'right'},
+    {key:'dock',label:'Receiving Dock to Stock (Business Days)',idx:5,type:'number',align:'right'},
+    {key:'within',label:'Within Target?',idx:6,type:'string',align:'center'}
+  ];
+  function outboundCols(inclPallet){
+    var cols=[
+      {key:'ordnum',label:'Order Number',idx:0,type:'string',align:'left'},
+      {key:'channel',label:'Channel',idx:1,type:'string',align:'left'},
+      {key:'brand',label:'Brand',idx:2,type:'string',align:'left'},
+      {key:'qty',label:'Shipped Qty',idx:3,type:'number',align:'right'}
+    ];
+    var next=4;
+    if(inclPallet){ cols.push({key:'pallet',label:'Pallet Qty',idx:4,type:'number',align:'right'}); next=5; }
+    cols.push({key:'odate',label:'Order Date',idx:next,type:'date',align:'right'}); next++;
+    cols.push({key:'sdate',label:'Ship Date',idx:next,type:'date',align:'right'}); next++;
+    cols.push({key:'days',label:'Order to Ship Days',idx:next,type:'number',align:'right'}); next++;
+    cols.push({key:'within',label:'Within Target?',idx:next,type:'string',align:'center'});
+    return cols;
+  }
 
   // ---------------- Order Details filter helpers (Inbound / Outbound tabs) ----------------
   function parseMDY(s){
@@ -1203,6 +1272,7 @@
     }
     bindSlaSubTabHandlers();
     bindOrderFilterHandlers();
+    bindOrderSortHandlers();
     document.querySelectorAll('.sla-expand-row').forEach(function(row){
       row.addEventListener('click',function(){
         var rid=row.getAttribute('data-toggle');
@@ -1244,9 +1314,10 @@
     return '<div style="margin:18px 0 6px; font-size:12.5px; font-weight:600; color:#1F1F1D;">'+title+' <span style="color:#9A988F; font-weight:400; font-size:11px;">('+count+' order'+(count===1?'':'s')+')</span></div>';
   }
 
-  function renderInboundOrdersTable(rows,tableId,filename){
-    var head='<tr><th style="width:24px; border-bottom:0.5px solid #E4E2D8;"></th>'+th('PO Number','left')+th('Brand','left')+th('Received Qty')+th('In-Yard Date')+th('Receiving Date')+th('Receiving Dock to Stock (Business Days)')+th('Within Target?','center')+'</tr>';
-    var body=rows.map(function(r,idx){
+  function renderInboundOrdersTable(rows,tableId,filename,sortState){
+    var sortedRows=sortRowsBy(rows,INBOUND_COLS,sortState);
+    var head='<tr>'+stickyBlankTh(24)+INBOUND_COLS.map(function(c){return sortableTh(c,sortState,'inbound',null);}).join('')+'</tr>';
+    var body=sortedRows.map(function(r,idx){
       var rid=tableId+'-row-'+idx;
       var skus=r[7]||[];
       var summary='<tr class="sla-expand-row" data-toggle="'+rid+'" style="cursor:pointer;">'+
@@ -1262,9 +1333,11 @@
     return exportBtn(tableId,filename)+'<div class="table-scroll" style="max-height:440px; overflow-y:auto;"><table id="'+tableId+'">'+head+body+'</table></div>';
   }
 
-  function renderOutboundOrdersTable(rows,tableId,filename,inclPallet){
-    var head='<tr><th style="width:24px; border-bottom:0.5px solid #E4E2D8;"></th>'+th('Order Number','left')+th('Channel','left')+th('Brand','left')+th('Shipped Qty')+(inclPallet?th('Pallet Qty'):'')+th('Order Date')+th('Ship Date')+th('Order to Ship Days')+th('Within Target?','center')+'</tr>';
-    var body=rows.map(function(r,idx){
+  function renderOutboundOrdersTable(rows,tableId,filename,inclPallet,sortState,groupKey){
+    var cols=outboundCols(inclPallet);
+    var sortedRows=sortRowsBy(rows,cols,sortState);
+    var head='<tr>'+stickyBlankTh(24)+cols.map(function(c){return sortableTh(c,sortState,'outbound',groupKey);}).join('')+'</tr>';
+    var body=sortedRows.map(function(r,idx){
       var rid=tableId+'-row-'+idx;
       var i=0;
       var ordnum=r[i++],channel=r[i++],brand=r[i++],qty=r[i++],pallet=inclPallet?r[i++]:null,odate=r[i++],sdate=r[i++],days=r[i++],target=r[i++],skus=r[i++]||[];
@@ -1296,7 +1369,7 @@
     return '<div style="font-size:11.5px; color:#9A988F; margin-bottom:2px;">Order-level detail from your UNIS in/out export, Nov 2025–Jul 2026. Date range filters by In-Yard Date.</div>'+
       renderOrderFilterBar('inbound',slaInboundFilters,brandOptions,null,'Search PO number...')+
       slaSectionHeader('Inbound orders',filtered.length)+
-      renderInboundOrdersTable(filtered,'table-sla-inbound','SLA_Inbound_Orders.xlsx');
+      renderInboundOrdersTable(filtered,'table-sla-inbound','SLA_Inbound_Orders.xlsx',slaInboundSort);
   }
 
   function renderSlaOutboundTab(){
@@ -1319,9 +1392,9 @@
     return '<div style="font-size:11.5px; color:#9A988F; margin-bottom:2px;">Order-level detail from your UNIS in/out export, Nov 2025–Jul 2026. Date range filters by Order Date.</div>'+
       renderOrderFilterBar('outbound',slaOutboundFilters,brandOptions,channelOptions,'Search order number...')+
       slaSectionHeader('B2B outbound orders',filteredB2B.length)+
-      renderOutboundOrdersTable(filteredB2B,'table-sla-outbound-b2b','SLA_B2B_Outbound_Orders.xlsx',true)+
+      renderOutboundOrdersTable(filteredB2B,'table-sla-outbound-b2b','SLA_B2B_Outbound_Orders.xlsx',true,slaOutboundSort.b2b,'b2b')+
       slaSectionHeader('B2C outbound orders',filteredB2C.length)+
-      renderOutboundOrdersTable(filteredB2C,'table-sla-outbound-b2c','SLA_B2C_Outbound_Orders.xlsx',false);
+      renderOutboundOrdersTable(filteredB2C,'table-sla-outbound-b2c','SLA_B2C_Outbound_Orders.xlsx',false,slaOutboundSort.b2c,'b2c');
   }
 
   function skuBreakdownBlock(skus){
