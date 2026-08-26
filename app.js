@@ -955,8 +955,84 @@
     return spec.brands.indexOf('Total')!==-1?'Total':spec.brands[0];
   }
   var slaBrand=defaultBrandFor(slaWarehouse);
-  var slaSubTab='overview'; // 'overview' | 'details' | 'offenders'
+  var slaSubTab='overview'; // 'overview' | 'inbound' | 'outbound' | 'offenders'
   var slaOffenderOpen={}; // expanded-row tracker for Top Offenders, keyed by row id
+  var slaInboundFilters={brand:'All',dateFrom:'',dateTo:'',within:'All'};
+  var slaOutboundFilters={brand:'All',channel:'All',dateFrom:'',dateTo:'',within:'All'};
+
+  // ---------------- Order Details filter helpers (Inbound / Outbound tabs) ----------------
+  function parseMDY(s){
+    if(!s||typeof s!=='string') return null;
+    var p=s.split('/');
+    if(p.length!==3) return null;
+    var d=new Date(parseInt(p[2],10),parseInt(p[0],10)-1,parseInt(p[1],10));
+    return isNaN(d.getTime())?null:d;
+  }
+  function dateInRange(dateStr,fromStr,toStr){
+    if(!fromStr&&!toStr) return true;
+    var d=parseMDY(dateStr);
+    if(!d) return true; // don't exclude rows with unparseable/missing dates
+    if(fromStr){ var f=new Date(fromStr+'T00:00:00'); if(d<f) return false; }
+    if(toStr){ var t=new Date(toStr+'T00:00:00'); if(d>t) return false; }
+    return true;
+  }
+  function brandMatchesFilter(rowBrand,filterBrand){
+    if(filterBrand==='All') return true;
+    if(!rowBrand) return false;
+    return rowBrand.indexOf(filterBrand)!==-1;
+  }
+  function renderOrderFilterBar(kind,filters,brandOptions,channelOptions){
+    var brandSel='<select class="sla-filter-select" data-filter="brand" data-kind="'+kind+'" style="font-size:12px; padding:5px 8px; border-radius:6px; border:0.5px solid #D8D6CA; background:#FFFFFF; color:#2C2C2A;">'+
+      ['All'].concat(brandOptions).map(function(b){return '<option value="'+b+'"'+(b===filters.brand?' selected':'')+'>'+b+'</option>';}).join('')+
+      '</select>';
+    var channelHtml='';
+    if(channelOptions){
+      channelHtml='<div style="display:flex; align-items:center; gap:6px;"><span style="font-size:11px; font-weight:600; color:#6B6A63;">Channel</span>'+
+        '<select class="sla-filter-select" data-filter="channel" data-kind="'+kind+'" style="font-size:12px; padding:5px 8px; border-radius:6px; border:0.5px solid #D8D6CA; background:#FFFFFF; color:#2C2C2A;">'+
+        ['All'].concat(channelOptions).map(function(c){return '<option value="'+c+'"'+(c===filters.channel?' selected':'')+'>'+c+'</option>';}).join('')+
+        '</select></div>';
+    }
+    var withinHtml='<div style="display:inline-flex; gap:2px; background:#EFEDE4; border-radius:8px; padding:3px;">'+
+      ['All','Hit','Miss'].map(function(v){
+        var active=filters.within===v;
+        return '<span class="filter-pill sla-filter-within" data-kind="'+kind+'" data-value="'+v+'" style="border-radius:6px; border:none; cursor:pointer;'+(active?' background:#089AA0; color:#FFFFFF; font-weight:600;':' background:transparent; color:#6B6A63;')+'">'+v+'</span>';
+      }).join('')+'</div>';
+    var dateHtml='<input type="date" class="sla-filter-date" data-filter="dateFrom" data-kind="'+kind+'" value="'+filters.dateFrom+'" style="font-size:12px; padding:5px 8px; border-radius:6px; border:0.5px solid #D8D6CA; color:#2C2C2A;">'+
+      '<span style="font-size:11px; color:#9A988F;">to</span>'+
+      '<input type="date" class="sla-filter-date" data-filter="dateTo" data-kind="'+kind+'" value="'+filters.dateTo+'" style="font-size:12px; padding:5px 8px; border-radius:6px; border:0.5px solid #D8D6CA; color:#2C2C2A;">';
+    return '<div style="display:flex; align-items:center; gap:18px; flex-wrap:wrap; background:#FFFFFF; border:0.5px solid #E4E2D8; border-radius:8px; padding:10px 14px; margin-bottom:14px;">'+
+      '<div style="display:flex; align-items:center; gap:6px;"><span style="font-size:11px; font-weight:600; color:#6B6A63;">Brand</span>'+brandSel+'</div>'+
+      channelHtml+
+      '<div style="display:flex; align-items:center; gap:6px;"><span style="font-size:11px; font-weight:600; color:#6B6A63;">Date range</span>'+dateHtml+'</div>'+
+      '<div style="display:flex; align-items:center; gap:6px;"><span style="font-size:11px; font-weight:600; color:#6B6A63;">Within Target</span>'+withinHtml+'</div>'+
+    '</div>';
+  }
+  function bindOrderFilterHandlers(){
+    document.querySelectorAll('.sla-filter-select').forEach(function(el){
+      el.addEventListener('change',function(){
+        var kind=el.getAttribute('data-kind'),filt=el.getAttribute('data-filter');
+        var target=kind==='inbound'?slaInboundFilters:slaOutboundFilters;
+        target[filt]=el.value;
+        renderSLA(slaBrand);
+      });
+    });
+    document.querySelectorAll('.sla-filter-date').forEach(function(el){
+      el.addEventListener('change',function(){
+        var kind=el.getAttribute('data-kind'),filt=el.getAttribute('data-filter');
+        var target=kind==='inbound'?slaInboundFilters:slaOutboundFilters;
+        target[filt]=el.value;
+        renderSLA(slaBrand);
+      });
+    });
+    document.querySelectorAll('.sla-filter-within').forEach(function(el){
+      el.addEventListener('click',function(){
+        var kind=el.getAttribute('data-kind'),val=el.getAttribute('data-value');
+        var target=kind==='inbound'?slaInboundFilters:slaOutboundFilters;
+        target.within=val;
+        renderSLA(slaBrand);
+      });
+    });
+  }
 
   // ---------------- SLA compliance % lookup (used by Service Levels trends + KPI cards) ----------------
   var MONTH_TO_SLA_PERIOD={'Jun 2026':'June 2026','Jul 2026':'July 2026'};
@@ -1095,8 +1171,10 @@
 
     var subTabHtml=renderSlaSubTabs();
     var mainHtml;
-    if(slaSubTab==='details'){
-      mainHtml=renderSlaOrderDetails();
+    if(slaSubTab==='inbound'){
+      mainHtml=renderSlaInboundTab();
+    } else if(slaSubTab==='outbound'){
+      mainHtml=renderSlaOutboundTab();
     } else if(slaSubTab==='offenders'){
       mainHtml=renderSlaTopOffenders();
     } else {
@@ -1112,6 +1190,7 @@
       renderSLA(slaBrand);
     });
     bindSlaSubTabHandlers();
+    bindOrderFilterHandlers();
     document.querySelectorAll('.sla-expand-row').forEach(function(row){
       row.addEventListener('click',function(){
         var rid=row.getAttribute('data-toggle');
@@ -1128,7 +1207,7 @@
   // ---------------- SLA Overview / Order Details / Top Offenders sub-tabs ----------------
   function renderSlaSubTabs(){
     var st=slaSubTab;
-    var opts=[['overview','Overview'],['details','Order Details'],['offenders','Top Offenders']];
+    var opts=[['overview','Overview'],['inbound','Inbound'],['outbound','Outbound'],['offenders','Top Offenders']];
     return '<div style="display:inline-flex; gap:2px; margin-bottom:14px; background:#EFEDE4; border-radius:8px; padding:3px;">'+
       opts.map(function(pair){
         var active=st===pair[0];
@@ -1191,16 +1270,42 @@
     return exportBtn(tableId,filename)+'<div class="table-scroll" style="max-height:440px; overflow-y:auto;"><table id="'+tableId+'">'+head+body+'</table></div>';
   }
 
-  function renderSlaOrderDetails(){
+  function renderSlaInboundTab(){
     if(slaWarehouse!=='US'||typeof window.SLA_ORDERS_US==='undefined') return comingSoonPanel();
     var d=window.SLA_ORDERS_US;
-    return '<div style="font-size:11.5px; color:#9A988F; margin-bottom:2px;">Order-level detail from your UNIS in/out export, Nov 2025–Jul 2026.</div>'+
-      slaSectionHeader('Inbound orders',d.inbound.length)+
-      renderInboundOrdersTable(d.inbound,'table-sla-inbound','SLA_Inbound_Orders.xlsx')+
-      slaSectionHeader('B2B outbound orders',d.outboundB2B.length)+
-      renderOutboundOrdersTable(d.outboundB2B,'table-sla-outbound-b2b','SLA_B2B_Outbound_Orders.xlsx',true)+
-      slaSectionHeader('B2C outbound orders',d.outboundB2C.length)+
-      renderOutboundOrdersTable(d.outboundB2C,'table-sla-outbound-b2c','SLA_B2C_Outbound_Orders.xlsx',false);
+    var brandOptions=SLA_SPECS.US.brands.filter(function(b){return b!=='Total';});
+    var filtered=d.inbound.filter(function(r){
+      return brandMatchesFilter(r[1],slaInboundFilters.brand)&&
+        dateInRange(r[3],slaInboundFilters.dateFrom,slaInboundFilters.dateTo)&&
+        (slaInboundFilters.within==='All'||r[6]===slaInboundFilters.within);
+    });
+    return '<div style="font-size:11.5px; color:#9A988F; margin-bottom:2px;">Order-level detail from your UNIS in/out export, Nov 2025–Jul 2026. Date range filters by In-Yard Date.</div>'+
+      renderOrderFilterBar('inbound',slaInboundFilters,brandOptions,null)+
+      slaSectionHeader('Inbound orders',filtered.length)+
+      renderInboundOrdersTable(filtered,'table-sla-inbound','SLA_Inbound_Orders.xlsx');
+  }
+
+  function renderSlaOutboundTab(){
+    if(slaWarehouse!=='US'||typeof window.SLA_ORDERS_US==='undefined') return comingSoonPanel();
+    var d=window.SLA_ORDERS_US;
+    var brandOptions=SLA_SPECS.US.brands.filter(function(b){return b!=='Total';});
+    var channelOptions=[];
+    d.outboundB2B.concat(d.outboundB2C).forEach(function(r){ if(r[1]&&channelOptions.indexOf(r[1])===-1) channelOptions.push(r[1]); });
+    channelOptions.sort();
+    function matches(r,dateIdx,withinIdx){
+      return brandMatchesFilter(r[2],slaOutboundFilters.brand)&&
+        (slaOutboundFilters.channel==='All'||r[1]===slaOutboundFilters.channel)&&
+        dateInRange(r[dateIdx],slaOutboundFilters.dateFrom,slaOutboundFilters.dateTo)&&
+        (slaOutboundFilters.within==='All'||r[withinIdx]===slaOutboundFilters.within);
+    }
+    var filteredB2B=d.outboundB2B.filter(function(r){ return matches(r,5,8); });
+    var filteredB2C=d.outboundB2C.filter(function(r){ return matches(r,4,7); });
+    return '<div style="font-size:11.5px; color:#9A988F; margin-bottom:2px;">Order-level detail from your UNIS in/out export, Nov 2025–Jul 2026. Date range filters by Order Date.</div>'+
+      renderOrderFilterBar('outbound',slaOutboundFilters,brandOptions,channelOptions)+
+      slaSectionHeader('B2B outbound orders',filteredB2B.length)+
+      renderOutboundOrdersTable(filteredB2B,'table-sla-outbound-b2b','SLA_B2B_Outbound_Orders.xlsx',true)+
+      slaSectionHeader('B2C outbound orders',filteredB2C.length)+
+      renderOutboundOrdersTable(filteredB2C,'table-sla-outbound-b2c','SLA_B2C_Outbound_Orders.xlsx',false);
   }
 
   function skuBreakdownBlock(skus){
