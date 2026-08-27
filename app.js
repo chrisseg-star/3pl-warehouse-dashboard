@@ -1330,7 +1330,7 @@
       var detail='<tr id="'+rid+'" style="display:none;"><td colspan="8" style="padding:0; border-bottom:0.5px solid #F0EEE5;">'+skuBreakdownBlock(skus)+'</td></tr>';
       return summary+detail;
     }).join('');
-    return exportBtn(tableId,filename)+'<div class="table-scroll" style="max-height:440px; overflow-y:auto;"><table id="'+tableId+'">'+head+body+'</table></div>';
+    return exportBtn(tableId,filename)+'<div class="table-scroll" style="max-height:440px; overflow-y:auto;"><table id="'+tableId+'" style="border-collapse:separate; border-spacing:0;">'+head+body+'</table></div>';
   }
 
   function renderOutboundOrdersTable(rows,tableId,filename,inclPallet,sortState,groupKey){
@@ -1352,7 +1352,7 @@
       var detail='<tr id="'+rid+'" style="display:none;"><td colspan="'+(inclPallet?10:9)+'" style="padding:0; border-bottom:0.5px solid #F0EEE5;">'+skuBreakdownBlock(skus)+'</td></tr>';
       return summary+detail;
     }).join('');
-    return exportBtn(tableId,filename)+'<div class="table-scroll" style="max-height:440px; overflow-y:auto;"><table id="'+tableId+'">'+head+body+'</table></div>';
+    return exportBtn(tableId,filename)+'<div class="table-scroll" style="max-height:440px; overflow-y:auto;"><table id="'+tableId+'" style="border-collapse:separate; border-spacing:0;">'+head+body+'</table></div>';
   }
 
   function renderSlaInboundTab(){
