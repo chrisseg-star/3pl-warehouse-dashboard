@@ -819,10 +819,14 @@
     var fs=filterState.value;
     var lm=MONTHS[MONTHS.length-1];
     var latest=valAgg(lm,fs.region,fs.brand);
+    var regionTotal=valAgg(lm,fs.region,'All');
+    var sharePct=(latest&&regionTotal&&regionTotal.units)?(latest.units/regionTotal.units*100):null;
+    var regionLabel=fs.region==='All'?'All regions':fs.region;
     var kpiHtml=latest?('<div style="display:flex; gap:12px; margin-bottom:16px;">'+
       statTile(fmtCur(latest.value,'$'),'Total inventory value',lm,'#2C2C2A','#FFFFFF')+
       statTile(fmtN(latest.units,0),'Total inventory units',lm,'#089AA0','#FFFFFF')+
       statTile(latest.above180Value?fmtCur(latest.above180Value,'$'):'–','Value above 180 days',lm,'#E24B4A','#FFFFFF')+
+      statTile(sharePct!==null?sharePct.toFixed(1)+'%':'–',displayBrand(fs.brand)+' share of units','of '+regionLabel+' total · '+lm,'#7A5AF8','#FFFFFF')+
     '</div>'):'';
     var filtersHtml=renderCatFilters('value');
     var subTabHtml=renderSubTabs('value');
