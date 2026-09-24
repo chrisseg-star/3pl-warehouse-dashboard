@@ -1,6 +1,8 @@
 (function(){
   var REGIONS=['US','CA','UK','EU'];
   var BRANDS=['Big Fudge Vinyl','Cat Ladies','Encha'];
+  var BRAND_COLORS={'Big Fudge Vinyl':'#089AA0','Cat Ladies':'#7A5AF8','Encha':'#EF9F27'};
+  var REGION_FULL={US:'United States',CA:'Canada',UK:'United Kingdom',EU:'European Union'};
   var COMBOS=[['US','Big Fudge Vinyl'],['US','Cat Ladies'],['US','Encha'],['CA','Big Fudge Vinyl'],['UK','Big Fudge Vinyl'],['EU','Big Fudge Vinyl']];
   var MONTHS=['Jun 2026','Jul 2026'];
 
@@ -339,6 +341,91 @@
     ['Above 180 days units',function(a){return a.above180Units?fmtN(a.above180Units,0):'–';},function(a){return a.above180Units||null;},'lower'],
     ['Above 180 days value',function(a){return a.above180Value?fmtCur(a.above180Value,'$'):'–';},function(a){return a.above180Value||null;},'lower']
   ];
+
+  // ---------- Brand Breakdown (at-a-glance, all warehouses, ignores page filters) ----------
+  function computeBrandBreakdown(month){
+    return REGIONS.map(function(region){
+      var brands=brandsForRegion(region);
+      var rows=brands.map(function(b){
+        var m=seriesFor(VAL,month,region,b);
+        var units=m.reduce(function(a,r){return a+r[3];},0);
+        var value=m.reduce(function(a,r){return a+r[4];},0);
+        return {brand:b,units:units,value:value};
+      }).filter(function(r){return r.units>0||r.value>0;});
+      var totalUnits=rows.reduce(function(a,r){return a+r.units;},0);
+      var totalValue=rows.reduce(function(a,r){return a+r.value;},0);
+      rows.forEach(function(r){
+        r.unitPct=totalUnits?(r.units/totalUnits*100):0;
+        r.valuePct=totalValue?(r.value/totalValue*100):0;
+      });
+      rows.sort(function(a,b){return b.units-a.units;});
+      return {region:region,rows:rows,totalUnits:totalUnits,totalValue:totalValue};
+    });
+  }
+
+  function brandBreakdownCard(entry,month){
+    var canvasId='chart-brand-donut-'+entry.region;
+    var hasData=entry.rows.length>0;
+    var legend=entry.rows.map(function(r){
+      return '<div style="display:flex; align-items:center; gap:7px; font-size:11.5px; padding:3px 0;">'+
+        '<span style="width:9px; height:9px; border-radius:50%; background:'+(BRAND_COLORS[r.brand]||'#9A988F')+'; display:inline-block; flex-shrink:0;"></span>'+
+        '<span style="color:#2C2C2A; flex:1;">'+r.brand+'</span>'+
+        '<span style="color:#6B6A63; font-weight:600;">'+r.unitPct.toFixed(1)+'%</span>'+
+      '</div>';
+    }).join('');
+    return '<div style="background:#FFFFFF; border:0.5px solid #E4E2D8; border-radius:10px; padding:14px; box-shadow:0 1px 2px rgba(44,44,42,0.04); display:flex; flex-direction:column;">'+
+      '<div style="display:flex; align-items:baseline; justify-content:space-between; margin-bottom:2px;">'+
+        '<div style="font-size:13px; font-weight:700; color:#1F1F1D;">'+entry.region+'</div>'+
+        '<div style="font-size:10px; color:#9A988F;">'+(REGION_FULL[entry.region]||'')+'</div>'+
+      '</div>'+
+      '<div style="font-size:11px; color:#6B6A63; margin-bottom:8px;">'+fmtN(entry.totalUnits,0)+' units · '+fmtCur(entry.totalValue,'$')+'</div>'+
+      (hasData?(
+        '<div style="position:relative; height:110px; margin:0 auto 8px;"><canvas id="'+canvasId+'"></canvas></div>'+
+        '<div>'+legend+'</div>'
+      ):'<div style="flex:1; display:flex; align-items:center; justify-content:center; color:#B4B2A9; font-size:11.5px; min-height:110px;">No data</div>')+
+    '</div>';
+  }
+
+  function renderBrandBreakdown(month){
+    var data=computeBrandBreakdown(month);
+    var cards=data.map(function(entry){return brandBreakdownCard(entry,month);}).join('');
+    return '<div style="background:#FBFAF5; border:0.5px solid #E4E2D8; border-radius:12px; padding:16px; margin-bottom:16px;">'+
+      '<div style="display:flex; align-items:baseline; justify-content:space-between; margin-bottom:2px; flex-wrap:wrap; gap:6px;">'+
+        '<div style="font-size:14.5px; font-weight:700; color:#1F1F1D;">Brand Breakdown</div>'+
+        '<div style="font-size:11px; color:#9A988F;">Units by brand, every warehouse · '+month+'</div>'+
+      '</div>'+
+      '<div style="font-size:11.5px; color:#6B6A63; margin-bottom:12px;">All regions and brands, independent of the filters below — the fastest way to see where inventory sits right now.</div>'+
+      '<div style="display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:12px;" class="brand-breakdown-grid">'+cards+'</div>'+
+    '</div>';
+  }
+
+  function drawBrandBreakdownDonuts(month){
+    var data=computeBrandBreakdown(month);
+    data.forEach(function(entry){
+      if(!entry.rows.length) return;
+      var el=document.getElementById('chart-brand-donut-'+entry.region);
+      if(!el||typeof Chart==='undefined') return;
+      var ctx=el.getContext('2d');
+      var c=new Chart(ctx,{
+        type:'doughnut',
+        data:{
+          labels:entry.rows.map(function(r){return r.brand;}),
+          datasets:[{data:entry.rows.map(function(r){return r.units;}),backgroundColor:entry.rows.map(function(r){return BRAND_COLORS[r.brand]||'#9A988F';}),borderColor:'#FFFFFF',borderWidth:2}]
+        },
+        options:{
+          responsive:true,maintainAspectRatio:false,cutout:'68%',
+          plugins:{
+            legend:{display:false},
+            tooltip:{backgroundColor:'#2C2C2A',padding:8,cornerRadius:6,callbacks:{label:function(ctx){
+              var r=entry.rows[ctx.dataIndex];
+              return r.brand+': '+fmtN(r.units,0)+' units ('+r.unitPct.toFixed(1)+'%)';
+            }}}
+          }
+        }
+      });
+      chartInstances.push(c);
+    });
+  }
 
   // ---------- Warehouse costs ----------
   function costsAgg(month,fRegion,fBrand){
@@ -828,14 +915,15 @@
       statTile(latest.above180Value?fmtCur(latest.above180Value,'$'):'–','Value above 180 days',lm,'#E24B4A','#FFFFFF')+
       statTile(sharePct!==null?sharePct.toFixed(1)+'%':'–',displayBrand(fs.brand)+' share of units','of '+regionLabel+' total · '+lm,'#7A5AF8','#FFFFFF')+
     '</div>'):'';
-    var filtersHtml=renderCatFilters('value');
     var subTabHtml=renderSubTabs('value');
     var showOverview=subTabState.value==='overview';
+    var brandBreakdownHtml=showOverview?renderBrandBreakdown(lm):'';
+    var filtersHtml=renderCatFilters('value');
     var match=hasAnyMatch(VAL,fs.region,fs.brand);
     var bodyHtml=showOverview?(match?(trendsIntro()+'<div style="background:#FFFFFF; border:0.5px solid #E4E2D8; border-radius:8px; padding:14px 16px;">'+
       chartCardHeader('Units vs. value by month','Each bar splits into a normal (base color) segment and an above-180-days (red) segment · Units (right axis) · Value (left axis, $)','export-value-bars')+
       '<div style="height:280px; margin-top:8px;"><canvas id="chart-value-bars"></canvas></div></div>'):noDataCallout()):comingSoonPanel();
-    document.getElementById('content-host').innerHTML=kpiHtml+filtersHtml+subTabHtml+bodyHtml;
+    document.getElementById('content-host').innerHTML=kpiHtml+brandBreakdownHtml+filtersHtml+subTabHtml+bodyHtml;
     document.querySelectorAll('.filter-pill[data-kind]').forEach(function(el){
       el.addEventListener('click',function(){
         var kind=el.getAttribute('data-kind'),val=el.getAttribute('data-value');
@@ -851,6 +939,7 @@
     });
     bindSubTabHandlers('value',renderInventoryValue);
     destroyCharts();
+    if(showOverview){ drawBrandBreakdownDonuts(lm); }
     if(showOverview&&match){
       var kpis=MONTHS.map(function(m){return valAgg(m,fs.region,fs.brand);});
       var unitsNormalV=kpis.map(function(k){return k?(k.units-(k.above180Units||0)):null;});
